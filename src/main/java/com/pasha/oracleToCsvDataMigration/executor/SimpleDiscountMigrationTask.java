@@ -4,20 +4,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.rowset.SqlRowSet;
 
-import java.math.BigDecimal;
-import java.sql.Types;
-import java.text.DateFormat;
-import java.text.DecimalFormat;
-import java.text.DecimalFormatSymbols;
-import java.text.SimpleDateFormat;
-import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 
 @Slf4j
-public final class SimpleDiscountMigrationTask implements Callable<DiscountMigrationTaskResult>, IMigrationTask {
+public final class SimpleDiscountMigrationTask
+        extends AbstractMigrationTask
+        implements Callable<DiscountMigrationTaskResult> {
 
     private static final String SELECT_ALL_QUERY_TEMPLATE = "SELECT * FROM %s";
     private static final String CSV_EXTENSION = ".csv";
@@ -72,33 +66,7 @@ public final class SimpleDiscountMigrationTask implements Callable<DiscountMigra
         csvWriter.writeHeader(columnNames);
         long countMigratedRows = 0;
         while (sqlRowSet.next()) {
-            List<Object> csvLine = new ArrayList<>();
-            DateFormat dateFormatter = new SimpleDateFormat("yyyy.MM.dd HH:mm:ss");
-            DecimalFormatSymbols unusualSymbols = new DecimalFormatSymbols();
-            DecimalFormat numFormatter = new DecimalFormat("");
-            for (int i = 1; i < columnCount; ++i) {
-                int type = sqlRowSet.getMetaData().getColumnType(i);
-                String toWrite;
-                switch (type) {
-                    case Types.TIMESTAMP:
-                        Date valueD = sqlRowSet.getDate(i);
-                        toWrite = (valueD == null ? "" : dateFormatter.format(valueD));
-                        break;
-                    case Types.FLOAT:
-                    case Types.DOUBLE:
-                    case Types.NUMERIC:
-                        BigDecimal valueN = sqlRowSet.getBigDecimal(i);
-                        toWrite = (valueN == null ? "" : numFormatter.format(valueN));
-                        break;
-                    default:
-                        String valueS = sqlRowSet.getString(i);
-                        toWrite = (valueS == null ? "" : valueS).replace('\n', ' ');
-                        break;
-                }
-//                final String columnTypeName = sqlRowSet.getMetaData().getColumnName(i);
-//                final Object object = sqlRowSet.getObject(columnTypeName);
-                csvLine.add(toWrite);
-            }
+            List<Object> csvLine = createCsvLine(sqlRowSet, columnCount);
             csvWriter.writeRecord(csvLine);
             ++countMigratedRows;
         }
