@@ -1,14 +1,17 @@
 package com.pasha.oracleToCsvDataMigration.command;
 
 import com.pasha.oracleToCsvDataMigration.executor.IMigrationExecutor;
-import com.pasha.oracleToCsvDataMigration.model.MigrationParams;
-import com.pasha.oracleToCsvDataMigration.model.MigrationSourceType;
+import com.pasha.oracleToCsvDataMigration.executor.MigrationParams;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.shell.core.CommandMarker;
 import org.springframework.shell.core.annotation.CliCommand;
 import org.springframework.shell.core.annotation.CliOption;
 import org.springframework.stereotype.Component;
 
+import java.math.BigDecimal;
+
+@Slf4j
 @Component
 public final class MigrationCommand implements CommandMarker {
 
@@ -19,33 +22,31 @@ public final class MigrationCommand implements CommandMarker {
         this.migrationExecutor = migrationExecutor;
     }
 
-    @CliCommand(value = "migrate")
+    @CliCommand(value = "migrateDiscounts")
     public void migrate(
-            @CliOption(key = "tableName") final String tableName,
-            @CliOption(key = "shards") final String shards,
-            @CliOption(key = "partitions") final String partitions,
-            @CliOption(key = "numThreads") final Integer numThreads,
-            @CliOption(key = "numTableChunks") final Integer numTableChunks,
-            @CliOption(key = "outputDir") final String outputDir,
-            @CliOption(key = "type") final String type) {
+            @CliOption(key = "tableNamePrefix", mandatory = true) final String tableName,
+            @CliOption(key = "outputDir", mandatory = true) final String outputDir,
+            @CliOption(key = "shards", mandatory = true) final String shards,
+            @CliOption(key = "partitions", mandatory = true) final String partitions,
+            @CliOption(key = "numThreads", mandatory = false) final Integer numThreads,
+            @CliOption(key = "numTableChunks", mandatory = false) final Integer numTableChunks,
+            @CliOption(key = "minSubsId", mandatory = false) final String minSubsId,
+            @CliOption(key = "maxSubsId", mandatory = false) final String maxSubsId,
+            @CliOption(key = "fetchSize", mandatory = false) final Integer fetchSize) {
+
         MigrationParams params = MigrationParams
                 .builder()
-                .tableName(tableName)
+                .tableNamePrefix(tableName)
                 .shards(shards)
                 .partitions(partitions)
                 .numThreads(numThreads)
                 .numTableChunks(numTableChunks)
                 .outputDir(outputDir)
-                .type(type)
+                .minSubsId(minSubsId != null ? new BigDecimal(minSubsId) : null)
+                .maxSubsId(maxSubsId != null ? new BigDecimal(maxSubsId) : null)
+                .fetchSize(fetchSize)
                 .build();
 
-        MigrationSourceType sourceType = MigrationSourceType.valueOf(params.getType().toUpperCase());
-        switch (sourceType) {
-            case DISCOUNTS:
-                migrationExecutor.execute(params);
-                break;
-            default:
-                System.out.println("Unknown source type!");
-        }
+        migrationExecutor.execute(params);
     }
 }

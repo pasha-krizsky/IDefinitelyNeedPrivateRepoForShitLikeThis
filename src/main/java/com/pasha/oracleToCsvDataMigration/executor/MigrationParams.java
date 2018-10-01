@@ -1,13 +1,14 @@
-package com.pasha.oracleToCsvDataMigration.model;
+package com.pasha.oracleToCsvDataMigration.executor;
 
 import lombok.Getter;
-import org.springframework.lang.NonNull;
-import org.springframework.lang.Nullable;
+import lombok.extern.slf4j.Slf4j;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
+@Slf4j
 @Getter
 public final class MigrationParams {
 
@@ -17,62 +18,72 @@ public final class MigrationParams {
     private final Integer numThreads;
     private final Integer numTableChunks;
     private final String outputDir;
-    private final String type;
+    private final BigDecimal minSubsId;
+    private final BigDecimal maxSubsId;
+    private final Integer fetchSize;
 
     private final List<String> tableNamesToVisit;
 
     public final static class Builder {
+        public static final int DEFAULT_FETCH_SIZE = 50_000;
         private String tableNamePrefix;
         private String shards;
         private String partitions;
         private Integer numThreads;
         private Integer numTableChunks;
         private String outputDir;
-        private String type;
+        private BigDecimal minSubsId;
+        private BigDecimal maxSubsId;
+        private Integer fetchSize;
         private List<String> tableNamesToVisit;
 
-        public @NonNull Builder tableName(@NonNull String tableNamePrefix) {
+        public Builder tableNamePrefix(String tableNamePrefix) {
             this.tableNamePrefix = tableNamePrefix;
             return this;
         }
 
-        public @NonNull Builder shards(@Nullable String shards) {
+        public Builder shards(String shards) {
             this.shards = shards;
             return this;
         }
 
-        public @NonNull Builder partitions(@Nullable String partitions) {
+        public Builder partitions(String partitions) {
             this.partitions = partitions;
             return this;
         }
 
-        public @NonNull Builder numThreads(@Nullable Integer numThreads) {
+        public Builder numThreads(Integer numThreads) {
             this.numThreads = numThreads;
             return this;
         }
 
-        public @NonNull Builder numTableChunks(@Nullable Integer numTableChunks) {
+        public Builder numTableChunks(Integer numTableChunks) {
             this.numTableChunks = numTableChunks;
             return this;
         }
 
-        public @NonNull Builder outputDir(@NonNull String outputDir) {
+        public Builder outputDir(String outputDir) {
             this.outputDir = outputDir;
             return this;
         }
 
-        public @NonNull Builder type(@NonNull String type) {
-            this.type = type;
+        public Builder minSubsId(BigDecimal minSubsId) {
+            this.minSubsId = minSubsId;
             return this;
         }
 
-        public @NonNull MigrationParams build() {
-            if (numTableChunks == null) {
-                this.numTableChunks = 1;
-            }
-            if (numThreads == null) {
-                this.numThreads = Runtime.getRuntime().availableProcessors();
-            }
+        public Builder maxSubsId(BigDecimal maxSubsId) {
+            this.maxSubsId = maxSubsId;
+            return this;
+        }
+
+        public Builder fetchSize(Integer fetchSize) {
+            this.fetchSize = fetchSize;
+            return this;
+        }
+
+        public MigrationParams build() {
+            processNullParams();
             buildTableNamesToVisit();
             return new MigrationParams(
                     tableNamePrefix,
@@ -81,8 +92,31 @@ public final class MigrationParams {
                     numThreads,
                     numTableChunks,
                     outputDir,
-                    type,
+                    minSubsId,
+                    maxSubsId,
+                    fetchSize,
                     tableNamesToVisit);
+        }
+
+        private void processNullParams() {
+            if (numTableChunks == null) {
+                this.numTableChunks = 1;
+                log.info("Param numTableChunks is not specified. Default value: {}", numTableChunks);
+            }
+            if (numThreads == null) {
+                this.numThreads = Runtime.getRuntime().availableProcessors();
+                log.info("Param numThreads is not specified. Default value: {}", numThreads);
+            }
+            if (fetchSize == null) {
+                this.fetchSize = DEFAULT_FETCH_SIZE;
+                log.info("Param fetchSize is not specified. Default value: {}", fetchSize);
+            }
+            if (minSubsId == null) {
+                log.info("Param minSubsId is not specified. Using numTableChunks instead");
+            }
+            if (maxSubsId == null) {
+                log.info("Param maxSubsId is not specified. Using numTableChunks instead");
+            }
         }
 
         private void buildTableNamesToVisit() {
@@ -109,21 +143,30 @@ public final class MigrationParams {
             }
         }
 
-        private @NonNull List<Integer> parseShards() {
+        private List<Integer> parseShards() {
             final String WRONG_SHARDS_FORMAT_MESSAGE = "Wrong shards format";
-            return parseShardsOrPartitions(WRONG_SHARDS_FORMAT_MESSAGE);
+            final String TWO_DOTS_DELIMITER_REGEX = "\\.\\.";
+            final String[] rawShards = shards.split(TWO_DOTS_DELIMITER_REGEX);
+            if (rawShards.length != 2) {
+                throw new RuntimeException(WRONG_SHARDS_FORMAT_MESSAGE);
+            }
+            final Integer firstShard;
+            final Integer lastShard;
+            try {
+                firstShard = Integer.parseInt(rawShards[0]);
+                lastShard = Integer.parseInt(rawShards[1]);
+            } catch (NumberFormatException e) {
+                throw new RuntimeException(WRONG_SHARDS_FORMAT_MESSAGE);
+            }
+            return Arrays.asList(firstShard, lastShard);
         }
 
-        private @NonNull List<Integer> parsePartitions() {
+        private List<Integer> parsePartitions() {
             final String WRONG_PARTITIONS_FORMAT_MESSAGE = "Wrong partitions format";
-            return parseShardsOrPartitions(WRONG_PARTITIONS_FORMAT_MESSAGE);
-        }
-
-        private @NonNull List<Integer> parseShardsOrPartitions(@NonNull String errorMessage) {
             final String TWO_DOTS_DELIMITER_REGEX = "\\.\\.";
             final String[] rawPartitions = partitions.split(TWO_DOTS_DELIMITER_REGEX);
             if (rawPartitions.length != 2) {
-                throw new RuntimeException(errorMessage);
+                throw new RuntimeException(WRONG_PARTITIONS_FORMAT_MESSAGE);
             }
             final Integer firstPartition;
             final Integer lastPartition;
@@ -131,32 +174,36 @@ public final class MigrationParams {
                 firstPartition = Integer.parseInt(rawPartitions[0]);
                 lastPartition = Integer.parseInt(rawPartitions[1]);
             } catch (NumberFormatException e) {
-                throw new RuntimeException(errorMessage);
+                throw new RuntimeException(WRONG_PARTITIONS_FORMAT_MESSAGE);
             }
             return Arrays.asList(firstPartition, lastPartition);
         }
     }
 
-    public static @NonNull Builder builder() {
+    public static Builder builder() {
         return new Builder();
     }
 
     private MigrationParams(
-            @NonNull String tableName,
-            @Nullable String shards,
-            @Nullable String partitions,
-            @Nullable Integer numThreads,
-            @NonNull Integer numTableChunks,
-            @NonNull String outputDir,
-            @NonNull String type,
-            @NonNull List<String> tableNamesToVisit) {
-        this.tableNamePrefix = tableName;
+            String tableNamePrefix,
+            String shards,
+            String partitions,
+            Integer numThreads,
+            Integer numTableChunks,
+            String outputDir,
+            BigDecimal minSubsId,
+            BigDecimal maxSubsId,
+            Integer fetchSize,
+            List<String> tableNamesToVisit) {
+        this.tableNamePrefix = tableNamePrefix;
         this.shards = shards;
         this.partitions = partitions;
         this.numThreads = numThreads;
         this.numTableChunks = numTableChunks;
         this.outputDir = outputDir;
-        this.type = type;
+        this.minSubsId = minSubsId;
+        this.maxSubsId = maxSubsId;
+        this.fetchSize = fetchSize;
         this.tableNamesToVisit = tableNamesToVisit;
     }
 }

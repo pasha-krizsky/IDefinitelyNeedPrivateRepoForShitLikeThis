@@ -17,30 +17,28 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 
 @Slf4j
-public final class DiscountMigrationTask implements Callable<DiscountMigrationTaskResult>, IMigrationTask {
+public final class SimpleDiscountMigrationTask implements Callable<DiscountMigrationTaskResult>, IMigrationTask {
 
-    private static final String SELECT_BY_SUBS_ID_QUERY_TEMPLATE = "SELECT * FROM %s WHERE SUBS_SUBS_ID >= %s AND SUBS_SUBS_ID < %s";
+    private static final String SELECT_ALL_QUERY_TEMPLATE = "SELECT * FROM %s";
+    private static final String CSV_EXTENSION = ".csv";
 
+    private final int taskId;
     private final String tableName;
-    private final BigDecimal firstSubsId;
-    private final BigDecimal lastSubsId;
-    private final Integer taskId;
-    private final CountDownLatch countDownLatch;
     private final String outputDir;
-
     private JdbcTemplate jdbcTemplate;
 
-    public DiscountMigrationTask(
+    /**
+     * To synchronize all submitted tasks
+     */
+    private final CountDownLatch countDownLatch;
+
+    public SimpleDiscountMigrationTask(
             final String tableName,
-            final BigDecimal firstSubsId,
-            final BigDecimal lastSubsId,
-            final Integer taskId,
+            final int taskId,
             CountDownLatch countDownLatch,
             JdbcTemplate template,
             String outputDir) {
         this.tableName = tableName;
-        this.firstSubsId = firstSubsId;
-        this.lastSubsId = lastSubsId;
         this.taskId = taskId;
         this.countDownLatch = countDownLatch;
         this.jdbcTemplate = template;
@@ -49,24 +47,29 @@ public final class DiscountMigrationTask implements Callable<DiscountMigrationTa
 
     @Override
     public DiscountMigrationTaskResult call() {
+
+        // Waiting for submission of all tasks
         try {
             countDownLatch.await();
         } catch (InterruptedException e) {
+            log.error("Error while waiting for tasks submission");
             throw new RuntimeException(e);
         }
 
-        CsvWriter csvWriter = new CsvWriter(outputDir + tableName + "-" + taskId);
-
-        log.info("Task {}. Selecting from {}. Min subsId = {}. Max subsId = {}",
-                lastSubsId, taskId, tableName, firstSubsId);
-
-        String query = String.format(SELECT_BY_SUBS_ID_QUERY_TEMPLATE, tableName, firstSubsId, lastSubsId);
+        log.info("Start TASK {}. Selecting all rows from {}", taskId, tableName);
+        String query = String.format(SELECT_ALL_QUERY_TEMPLATE, tableName);
         SqlRowSet sqlRowSet = jdbcTemplate.queryForRowSet(query);
+        final String csvFileName = outputDir + tableName + CSV_EXTENSION;
+        final DiscountMigrationTaskResult result = writeSqlRowSetToCsv(sqlRowSet, csvFileName);
+        log.info("TASK {} finished. Migrated {} rows", taskId, result.getNumberOfMigratedRows());
+        return result;
+    }
+
+    private DiscountMigrationTaskResult writeSqlRowSetToCsv(SqlRowSet sqlRowSet, String csvFileName) {
         final String[] columnNames = sqlRowSet.getMetaData().getColumnNames();
         int columnCount = sqlRowSet.getMetaData().getColumnCount();
-
+        final CsvWriter csvWriter = new CsvWriter(csvFileName);
         csvWriter.writeHeader(columnNames);
-
         long countMigratedRows = 0;
         while (sqlRowSet.next()) {
             List<Object> csvLine = new ArrayList<>();
@@ -100,9 +103,7 @@ public final class DiscountMigrationTask implements Callable<DiscountMigrationTa
             ++countMigratedRows;
         }
         csvWriter.flush();
-        DiscountMigrationTaskResult result = new DiscountMigrationTaskResult(this, countMigratedRows);
-        log.info("Task {} finished. Migrated {} rows. Min subsId = {}. Max subsId = {}",
-                taskId, columnCount, firstSubsId, lastSubsId);
-        return result;
+
+        return new DiscountMigrationTaskResult(this, countMigratedRows);
     }
 }
