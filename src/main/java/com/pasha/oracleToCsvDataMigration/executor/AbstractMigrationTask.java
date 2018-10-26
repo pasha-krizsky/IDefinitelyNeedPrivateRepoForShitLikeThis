@@ -21,7 +21,7 @@ public abstract class AbstractMigrationTask {
         DateFormat dateFormatter = new SimpleDateFormat(DATE_IN_CSV_PATTERN);
 //            DecimalFormatSymbols unusualSymbols = new DecimalFormatSymbols();
         DecimalFormat numFormatter = new DecimalFormat(DECIMAL_IN_CSV_PATTERN);
-        for (int columnNumber = 1; columnNumber < columnCount; ++columnNumber) {
+        for (int columnNumber = 1; columnNumber <= columnCount; ++columnNumber) {
             int type = sqlRowSet.getMetaData().getColumnType(columnNumber);
             String toWrite;
             switch (type) {
@@ -33,7 +33,7 @@ public abstract class AbstractMigrationTask {
                 case Types.DOUBLE:
                 case Types.NUMERIC:
                     BigDecimal valueN = sqlRowSet.getBigDecimal(columnNumber);
-                    toWrite = (valueN == null ? "" : numFormatter.format(valueN));
+                    toWrite = (valueN == null ? "" : /*numFormatter.format(valueN)*/ valueN.toString());
                     break;
                 default:
                     String valueS = sqlRowSet.getString(columnNumber);

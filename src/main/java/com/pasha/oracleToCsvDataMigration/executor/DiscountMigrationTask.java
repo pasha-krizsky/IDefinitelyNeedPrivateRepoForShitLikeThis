@@ -16,6 +16,7 @@ public final class DiscountMigrationTask
 
     private static final String SELECT_BY_SUBS_ID_QUERY_TEMPLATE
             = "SELECT * FROM %s WHERE SUBS_SUBS_ID >= %s AND SUBS_SUBS_ID < %s";
+    public static final String DISCOUNTS = "DISCOUNTS_";
 
     private final String tableName;
     private final BigDecimal firstSubsId;
@@ -51,7 +52,7 @@ public final class DiscountMigrationTask
             throw new RuntimeException(e);
         }
 
-        CsvWriter csvWriter = new CsvWriter(outputDir + tableName + "-" + taskId);
+        CsvWriter csvWriter = new CsvWriter(outputDir + DISCOUNTS + tableName + "_" + taskId);
 
         log.info("Task {}. Selecting from {}. Min subsId = {}. Max subsId = {}",
                 lastSubsId, taskId, tableName, firstSubsId);

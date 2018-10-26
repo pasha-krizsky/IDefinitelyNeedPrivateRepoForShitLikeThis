@@ -15,6 +15,7 @@ public final class SimpleDiscountMigrationTask
 
     private static final String SELECT_ALL_QUERY_TEMPLATE = "SELECT * FROM %s";
     private static final String CSV_EXTENSION = ".csv";
+    public static final String DISCOUNTS = "DISCOUNTS_";
 
     private final int taskId;
     private final String tableName;
@@ -53,7 +54,7 @@ public final class SimpleDiscountMigrationTask
         log.info("Start TASK {}. Selecting all rows from {}", taskId, tableName);
         String query = String.format(SELECT_ALL_QUERY_TEMPLATE, tableName);
         SqlRowSet sqlRowSet = jdbcTemplate.queryForRowSet(query);
-        final String csvFileName = outputDir + tableName + CSV_EXTENSION;
+        final String csvFileName = outputDir + DISCOUNTS + tableName + CSV_EXTENSION;
         final DiscountMigrationTaskResult result = writeSqlRowSetToCsv(sqlRowSet, csvFileName);
         log.info("TASK {} finished. Migrated {} rows", taskId, result.getNumberOfMigratedRows());
         return result;

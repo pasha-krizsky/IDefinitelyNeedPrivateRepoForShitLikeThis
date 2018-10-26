@@ -24,7 +24,7 @@ public class CsvWriter {
 
     public void writeHeader(String[] header) {
         try {
-            csvPrinter = new CSVPrinter(writer, CSVFormat.DEFAULT
+            csvPrinter = new CSVPrinter(writer, CSVFormat.DEFAULT.withDelimiter('^')
                     .withHeader(header));
         } catch (IOException e) {
             throw new RuntimeException(e);
